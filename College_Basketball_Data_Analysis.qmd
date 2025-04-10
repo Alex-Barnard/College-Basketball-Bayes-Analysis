@@ -80,6 +80,8 @@ table(data$final_four)
 offensive_defensive_metrics <- dagitty("dag{
   AdjOE -> Final_Four;
   AdjDE -> Final_Four;
+  AdjOE -> AdjEM;
+  AdjDE -> AdjEM;
   AdjTempo -> Final_Four;
   AdjEM -> Final_Four;
   Tempo -> AdjTempo;
