@@ -1,0 +1,44 @@
+---
+title: "Causal Diagram"
+format: html
+---
+
+
+```{r}
+library(dagitty)
+library(CalvinBayes)
+```
+
+```{r}
+# create the DAG object
+causal_diagram_1 <- dagitty("dag{
+  A -> B;
+  B -> C;
+  C -> D
+}")
+# plot it
+gg_dag(causal_diagram_1)
+```
+
+
+As you plan, keep in mind the Projects Overview (so you make choices that will allow you to add-on the add-on credits you desire!)
+
+At this point, you should have your dataset in hand and should be starting to think in more detail about the model you will fit.
+
+If any data wrangling is needed to prepare your dataset for model fitting, either work on that or ask Prof DR for help (I am happy to do all wrangling for you but I need direction on what it is you want to be done).
+
+You should have your causal diagram in mind by now, so you know what predictor(s) and response you'll use and how they are related (and what other variables must be considered in modeling). In this week's milestone submission, include a causal diagram with notes and explanation.
+
+If possible, think about stating your model description and rationale for priors.
+
+If you get that far, Simulating a prior predictive distribution should be a next step to reality-check your prior choices.
+
+You should also work on deciding this week whether your model will be hierarchical -- will you include any random intercepts (or - probably not - random slopes)?
+
+Your submission should be a rendered Quarto document showing all your work so far, your diagram, and notes about your plans (or accomplishments).
+
+
+```{r}
+diag
+```
+
