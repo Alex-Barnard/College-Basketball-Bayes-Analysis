@@ -67,10 +67,10 @@ This is a binary variable we will create, indicating whether a team was seeded i
 # binary response variable
 
 data <- data %>%
-  mutate (seed_top4 = ifelse(seed <4, TRUE, FALSE))
+  mutate (final_four = ifelse(final_four <0, FALSE, TRUE))
 
 # check the class balance
-table(data$seed_top4)
+table(data$final_four)
 ```
 
 
@@ -78,18 +78,21 @@ table(data$seed_top4)
 # causal diagram
 
 offensive_defensive_metrics <- dagitty("dag{
-  AdjOE -> seed_top4;
-  AdjDE -> seed_top4;
-  AdjTempo -> seed_top4;
-  AdjEM -> seed_top4;
+  AdjOE -> Final_Four;
+  AdjDE -> Final_Four;
+  AdjTempo -> Final_Four;
+  AdjEM -> Final_Four;
   Tempo -> AdjTempo;
   OE -> AdjOE;
-  DE -> AdjDE
+  DE -> AdjDE;
+  AdjOE -> seed;
+  AdjDE -> seed;
+  seed -> Final_Four
 }")
 # plot it
 ggdag(offensive_defensive_metrics) +
   theme(
-    plot.margin = margin(10, 10, 10, 10)
+    plot.margin = margin(15, 15, 15, 15)
   )
 ```
 
