@@ -17,11 +17,12 @@ library(tidyverse)
 library(dagitty)
 library(ggdag)
 library(ggplot2)
+library(bayesplot)
 ```
 
 ```{r}
 #| include: false
-# read data_set
+# load data_set
 data <- read_csv("summary25_pt.csv")
 ```
 
@@ -94,9 +95,13 @@ ggdag(offensive_defensive_metrics) +
 ```
 
 In the next steps of the analysis, we will:
+	
+- Fit the model with more iterations to refine the estimates
+- Check model diagnostics (convergence check and residuals)
+- Fitting the model using MCMC.
+- Fit a logistic regression (GLM with binomial distribution) to model seed_top4 ~ AdjOE + AdjDE + AdjTempo + AdjEM.
+- Interpret which performance metrics most significantly affect a team’s seeding.
+- Evaluate prediction performance.
 
-	•	Fit a logistic regression (GLM with binomial distribution) to model seed_top4 ~ AdjOE + AdjDE + AdjTempo + AdjEM.
-	
-	•	Evaluate prediction performance.
-	
-	•	Interpret which performance metrics most significantly affect a team’s seeding.
+
+
