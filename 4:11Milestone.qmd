@@ -108,5 +108,22 @@ final_four ~ AdjOE + AdjDE AdjEM + AdjTempo + Seed.
 - Evaluate prediction performance.
 
 
+#
 
 
+$$\mu_i \sim \beta_0 + \beta_1 * \text{Year.Built.Z} + \beta_2 * \text{Inspection.Weeks.Z} + \beta_{Owner[i]}$$
+$$\beta_{Owner=j} \sim \text{Normal}(0,1) \text{ for } j = 1\dots2$$
+
+
+
+
+$$\text{final_four}_i ∼ Binomial(1, p_i)$$
+$$logit(p_i) = \beta_1 * AdjOE_i + \beta_2 * AdjDE_i + \beta_3 * AdjEM_i + \beta_4 * AdjTempo_i + \beta_{seed[i]}$$
+$$\beta_1 \sim Normal(1, 1.5)$$
+$$\beta_2 \sim Normal(1, 1.5)$$
+$$\beta_3 \sim Normal(1, 1.5)$$
+$$\beta_4 \sim Normal(0, 1.5)$$
+$$\beta_{seed=j} \sim Normal(0,1) for j = 1...2$$
+
+
+final_four ~ AdjOE + AdjDE + AdjEM + AdjTempo + Seed.
