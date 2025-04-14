@@ -48,16 +48,16 @@ This data includes metrics such as:
 
 Our goal is to answer the question:
 
-What is the probability that a team ends up in the top 4 seeds based on their adjusted offensive and defensive efficiency?
+What is the probability that a team ends up in the Final Four based on their adjusted offensive and defensive efficiency?
 
-This will help us to understand which team characteristics are most influential in achieving a top seed, which is critical for predicting tournament success.
+This will help us understand which team characteristics are most influential in achieving Final Four success, which is critical for predicting tournament outcomes.
 
 
 ## Variables of Interest
 
-- Response variable: seed_top4 
+- Response variable: final_four
 
-This is a binary variable we will create, indicating whether a team was seeded in the top 4 (TURE if seeded <= 4, otherwise FASLE)
+This is a binary variable we will create, indicating whether a team was in the top 4 (TURE if final_four <= 4, otherwise FASLE)
 
 - Key predictor: AdjOE thus Adjusted Offensive Efficiency
 
@@ -97,6 +97,7 @@ ggdag(offensive_defensive_metrics) +
     plot.margin = margin(15, 15, 15, 15)
   )
 ```
+
 
 In the next steps of the analysis, we will:
 	
