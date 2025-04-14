@@ -1,0 +1,112 @@
+---
+title: "College_Basketball_Data_Analysis"
+format: 
+  html:
+    code-tools: true
+    toc: true
+    embed-resources: true
+editor: source
+---
+
+
+```{r}
+#| include: false
+
+library(tidyverse)
+library(dagitty)
+library(ggplot2)
+library(bayesplot)
+library(CalvinBayes)
+```
+
+```{r}
+#| include: false
+# load data_set
+data <- read_csv("summary25_pt.csv")
+```
+
+```{r}
+# glimpse of the data
+glimpse(data)
+```
+## Data Source
+
+
+This data includes metrics such as:
+
+- Tempo (pace of play)
+
+- Offensive/Defensive Efficiency (OE/DE)
+
+- Adjusted metrics (AdjOE, AdjDE)
+
+- Efficiency Margins (AdjEM)
+
+- Seed lines
+
+## Research question
+
+Our goal is to answer the question:
+
+What is the probability that a team ends up in a final four based on their adjusted offensive, defensive efficiency, adjusted efficiency margin, tempo, and seed line?
+
+This will help us to understand which team characteristics are most influential in having to win games in the NCAA tournament and reaching a final four
+
+
+## Variables of Interest
+
+- Response variable: final_four 
+
+This is a binary variable we will create, indicating whether a team has made a final four (TRUE if final_four = 1, otherwise FASLE)
+
+- Key predictor: AjdEM (AdjOE - AdjDE)
+
+- Other predictors may include AdjOE, AdjDE, AdjTempo, Seed
+
+```{r}
+# binary response variable
+
+data <- data %>%
+  mutate (final_four = ifelse(final_four <0, FALSE, TRUE))
+
+# check the class balance
+table(data$final_four)
+```
+
+
+```{r}
+# causal diagram
+
+causal <- dagitty("dag{
+  AdjOE -> final_four;
+  AdjDE -> final_four;
+  AdjOE -> AdjEM;
+  AdjDE -> AdjEM;
+  AdjTempo -> final_four;
+  AdjEM -> final_four;
+  Tempo -> AdjTempo;
+  OE -> AdjOE;
+  DE -> AdjDE;
+  AdjOE -> seed;
+  AdjDE -> seed;
+  seed -> final_four
+}")
+# plot it
+gg_dag(causal, size = 15, highlight = 'final_four' 
+#      + theme( plot.margin = margin(15, 15, 15, 15)
+  )
+```
+
+In the next steps of the analysis, we will:
+	
+- Fit the model with more iterations to refine the estimates
+- Check model diagnostics (convergence check and residuals)
+- Fitting the model using MCMC.
+- Fit a logistic regression (GLM with binomial distribution) to model 
+final_four ~ AdjOE + AdjDE AdjEM + AdjTempo + Seed.
+- Interpret which performance metrics most significantly affect a team's chances of making a final four
+- Evaluate prediction performance.
+
+
+
+
