@@ -1,0 +1,123 @@
+---
+title: "Prior Predictive Dist"
+format: html
+---
+```{r}
+library(dplyr)    
+library(tidyverse)
+library(ggformula)
+library(rstan)
+library(rethinking)
+library(CalvinBayes)
+library(tidybayes)
+library(bayesplot)
+```
+
+
+```{r}
+#| include: false
+# load data_set
+dat <- read_csv("summary25_pt.csv")
+```
+
+
+```{r}
+# Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
+
+dat <- data %>%
+  mutate(final_four = ifelse(final_four >= 0, TRUE, FALSE))
+
+# check the class balance
+table(data$final_four)
+```
+
+```{r}
+clean_data <- data %>%
+  drop_na(final_four, seed, AdjOE, AdjDE, AdjEM, AdjTempo)
+nrow(clean_data)
+
+```
+
+```{r}
+dat <- list(
+  final_four = as.integer(clean_data$final_four),
+  AdjOE = scale(clean_data$AdjOE),
+  AdjDE = scale(clean_data$AdjDE),
+  AdjEM = scale(clean_data$AdjEM),
+  AdjTempo = scale(clean_data$AdjTempo),
+  seed = clean_data$seed,
+  N = nrow(clean_data),
+  N_seeds = max(clean_data$seed, na.rm = TRUE)
+)
+
+```
+
+```{r}
+n_sim <- 10
+sigma_seed = dexp(1)
+
+prior_pred_dists <- tibble(
+  b1 = rnorm(n_sim, mean = 0, sd = 1.5),
+  b2 = rnorm(n_sim, mean = 0, sd = 1.5),
+  b3 = rnorm(n_sim, mean = 0, sd = 1.5),
+  b4 = rnorm(n_sim, mean = 0, sd = 1.5),
+  b_seed = rnorm(n_sim, mean = 0, sigma_seed),
+  sim_number = c(1:n_sim)
+  )
+
+# what did we do so far?
+# to make sure you understand, have a peek at the current result...
+glimpse(prior_pred_dists)
+
+
+
+```
+
+```{r}
+#| include: false
+m_mcmc <- ulam(
+  alist(
+    final_four ~ dbinom(1, p),
+    logit(p) <- b1*AdjOE + b2*AdjDE + b3*AdjEM + b4*AdjTempo + b_seed[seed],
+
+    # Priors for main effects
+    b1 ~ dnorm(0, 1.5),
+    b2 ~ dnorm(0, 1.5),
+    b3 ~ dnorm(0, 1.5),
+    b4 ~ dnorm(0, 1.5),
+
+    # Hierarchical prior for seed effects
+    b_seed[seed] ~ dnorm(0, sigma_seed),
+    sigma_seed ~ dexp(1)
+  ),
+  data = dat,
+  chains = 4,
+  cores = 4,
+  iter = 2000
+)
+
+```
+
+```{r}
+prior_pred_dists <- prior_pred_dists |>
+  rowwise() |>
+  mutate(
+    final_four = list(
+      rnorm(nrow(data),
+            mean = b1*data$AdjOE + b2*data$AdjDE + b3*data$AdjEM + b4*data$AdjTempo + b_seed[data$seed],
+            )
+    ) # end list()ification
+    
+  ) |>
+  # to end rowwise() operations
+  ungroup()
+
+glimpse(prior_pred_dists)
+```
+```{r}
+# take a look:
+gf_point(sim_income ~ n_adults | sim_number, 
+         data = prior_pred_dists,
+         alpha = 0.1)
+```
+
