@@ -1,0 +1,69 @@
+---
+title: "priors"
+format: html
+---
+
+Priors
+
+```{r}
+clean_data <- data %>%
+  drop_na(final_four, seed, AdjOE, AdjDE, AdjEM, AdjTempo)
+nrow(clean_data)
+
+```
+
+```{r}
+dat <- list(
+  final_four = as.integer(clean_data$final_four),
+  AdjOE = scale(clean_data$AdjOE),
+  AdjDE = scale(clean_data$AdjDE),
+  AdjEM = scale(clean_data$AdjEM),
+  AdjTempo = scale(clean_data$AdjTempo),
+  seed = clean_data$seed,
+  N = nrow(clean_data),
+  N_seeds = max(clean_data$seed, na.rm = TRUE)
+)
+
+```
+
+```{r}
+#| include: false
+m_mcmc <- ulam(
+  alist(
+    final_four ~ dbinom(1, p),
+    logit(p) <- b1*AdjOE + b2*AdjDE + b3*AdjEM + b4*AdjTempo + b_seed[seed],
+
+    # Priors for main effects
+    b1 ~ dnorm(0, 1.5),
+    b2 ~ dnorm(0, 1.5),
+    b3 ~ dnorm(0, 1.5),
+    b4 ~ dnorm(0, 1.5),
+
+    # Hierarchical prior for seed effects
+    b_seed[seed] ~ dnorm(0, sigma_seed),
+    sigma_seed ~ dexp(1)
+  ),
+  data = dat,
+  chains = 4,
+  cores = 4,
+  iter = 2000
+)
+
+```
+
+```{r}
+# View model results
+precis(m_mcmc, depth = 2)
+# Check trace plots for convergence
+traceplot(m_mcmc)
+```
+
+## Rtionale for Priors
+
+- Priors for Coefficients (β₁ to β₄)
+
+A Normal(0, 1.5) prior is assigned to each regression coefficient (β₁ to β₄), centering the effects around zero but allowing for moderately large deviations. This helps prevent overfitting while allowing the data to inform the posterior. Although it permits somewhat big impacts, this weakly informative prior focuses on no effect (0). We anticipate that coefficients will fall within a tolerable range because adjusted efficiency measurements are standardized or on comparable scales, and a standard deviation of 1.5 guarantees shrinkage without being overly constrictive.
+
+- Prior for Group-Level Intercept (β_seed[i])
+
+We assume that each seed group can vary significantly because β_seed[i] is taken from a normal distribution with its unique group-level standard deviation.  A hierarchical model with partial pooling is made possible by this structure, which acknowledges that various seeds may have distinct effects on the result while still drawing heavily from the population-level distribution.

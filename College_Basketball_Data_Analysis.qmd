@@ -17,6 +17,7 @@ library(dagitty)
 library(ggdag)
 library(ggplot2)
 library(bayesplot)
+library(rethinking)
 ```
 
 ```{r}
@@ -55,19 +56,19 @@ This will help us understand which team characteristics are most influential in 
 
 ## Variables of Interest
 
-- Response variable: final_four
+- Response variable: Final_four
 
-This is a binary variable we will create, indicating whether a team was in the top 4 (TURE if final_four <= 4, otherwise FASLE)
+This is a binary variable indicating whether a team made it to the Final Four (TRUE) or not (FALSE)
 
 - Key predictor: AdjOE thus Adjusted Offensive Efficiency
 
 - Other predictors may include AdjDE, AdjTempo, AdjEM(Efficiency Margin).
 
 ```{r}
-# binary response variable
+# Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
 
 data <- data %>%
-  mutate (final_four = ifelse(final_four <0, FALSE, TRUE))
+  mutate(final_four = ifelse(final_four >= 0, TRUE, FALSE))
 
 # check the class balance
 table(data$final_four)

@@ -6,3 +6,5 @@ format: html
 $$\text{final_four}_i ∼ Binomial(1, p_i)$$
 
 $$logit(p_i) = \beta_1 * AdjOE_i + \beta_2 * AdjDE_i + \beta_3 * AdjEM_i + \beta_4 * AdjTempo_i + \beta_{seed[i]}$$
+=======
+$$logit(p_i) = \beta_1 * AdjOE_i + \beta_2 * AdjDE_i + \beta_3 * AdjEM_i + \beta_4 * AdjTempo_i + \beta_{seed[i]}$$
