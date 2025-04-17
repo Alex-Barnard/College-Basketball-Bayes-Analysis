@@ -6,6 +6,18 @@ format: html
 Priors
 
 ```{r}
+library(dplyr)    
+library(tidyverse)
+library(ggformula)
+library(rstan)
+library(rethinking)
+library(CalvinBayes)
+library(tidybayes)
+library(bayesplot)
+```
+
+
+```{r}
 clean_data <- data %>%
   drop_na(final_four, seed, AdjOE, AdjDE, AdjEM, AdjTempo)
 nrow(clean_data)
@@ -56,6 +68,7 @@ m_mcmc <- ulam(
 precis(m_mcmc, depth = 2)
 # Check trace plots for convergence
 traceplot(m_mcmc)
+
 ```
 
 ## Rtionale for Priors
