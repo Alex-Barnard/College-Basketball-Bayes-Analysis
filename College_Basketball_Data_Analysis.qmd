@@ -1,5 +1,9 @@
 ---
 title: "College_Basketball_Data_Analysis"
+authors: 
+  - Blessing Amoah
+  - Alex Barnard
+  - Fengyi Li
 format: 
   html:
     code-tools: true
