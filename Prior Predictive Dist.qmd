@@ -2,7 +2,9 @@
 title: "Prior Predictive Dist"
 format: html
 ---
+
 ```{r}
+#| include: false
 library(dplyr)    
 library(tidyverse)
 library(ggformula)
@@ -24,15 +26,15 @@ dat <- read_csv("summary25_pt.csv")
 ```{r}
 # Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
 
-dat <- data %>%
+dat <- dat %>%
   mutate(final_four = ifelse(final_four >= 0, TRUE, FALSE))
 
 # check the class balance
-table(data$final_four)
+table(dat$final_four)
 ```
 
 ```{r}
-clean_data <- data %>%
+clean_data <- dat %>%
   drop_na(final_four, seed, AdjOE, AdjDE, AdjEM, AdjTempo)
 nrow(clean_data)
 
@@ -69,8 +71,6 @@ prior_pred_dists <- tibble(
 # to make sure you understand, have a peek at the current result...
 glimpse(prior_pred_dists)
 
-
-
 ```
 
 ```{r}
@@ -99,25 +99,99 @@ m_mcmc <- ulam(
 ```
 
 ```{r}
-prior_pred_dists <- prior_pred_dists |>
-  rowwise() |>
-  mutate(
-    final_four = list(
-      rnorm(nrow(data),
-            mean = b1*data$AdjOE + b2*data$AdjDE + b3*data$AdjEM + b4*data$AdjTempo + b_seed[data$seed],
-            )
-    ) # end list()ification
-    
-  ) |>
-  # to end rowwise() operations
-  ungroup()
+# Set number of simulations
+n_sim <- 1000
 
-glimpse(prior_pred_dists)
+# Simulate prior values for coefficients
+b1 <- rnorm(n_sim, 0, 1.5)
+b2 <- rnorm(n_sim, 0, 1.5)
+b3 <- rnorm(n_sim, 0, 1.5)
+b4 <- rnorm(n_sim, 0, 1.5)
+
+# Simulate group-level effects
+sigma_seed <- rexp(n_sim, 1)
+b_seed <- rnorm(n_sim, 0, sigma_seed)
+
+# Simulate standardized predictor values
+AdjOE <- rnorm(n_sim)
+AdjDE <- rnorm(n_sim)
+AdjEM <- rnorm(n_sim)
+AdjTempo <- rnorm(n_sim)
+
+# Linear predictor
+logit_p <- b1 * AdjOE + b2 * AdjDE + b3 * AdjEM + b4 * AdjTempo + b_seed
+
+# Transform to probability
+p <- 1 / (1 + exp(-logit_p))
+
+# Simulate binary final_four outcome
+final_four_sim <- rbinom(n_sim, size = 1, prob = p)
+
+# Make dataframe for plotting
+prior_sim_df <- tibble(
+  probability = p,
+  outcome = final_four_sim
+)
+
+# Plot histogram of prior predictive probabilities
+ggplot(prior_sim_df, aes(x = probability)) +
+  geom_histogram(bins = 40, fill = "maroon", color = "gold") +
+  labs(title = "Prior Predictive Distribution for Final Four",
+       x = "Simulated Probability (Prior Only)",
+       y = "Count") +
+  theme_minimal()
 ```
+
 ```{r}
-# take a look:
-gf_point(sim_income ~ n_adults | sim_number, 
-         data = prior_pred_dists,
-         alpha = 0.1)
+# Teams to simulate per prior draw
+n_teams <- 100  
+
+# prior_pred_dists for each team
+prior_pred_df <- prior_pred_dists %>%
+  slice(rep(1:n(), each = n_teams)) %>%
+  mutate(
+    team_id = rep(1:n_teams, times = nrow(prior_pred_dists)),
+    AdjOE = rnorm(n(), mean = 0, sd = 1),
+    AdjDE = rnorm(n(), mean = 0, sd = 1),
+    AdjEM = rnorm(n(), mean = 0, sd = 1),
+    AdjTempo = rnorm(n(), mean = 0, sd = 1)
+  ) %>%
+  mutate(
+    logit_p = b1 * AdjOE + b2 * AdjDE + b3 * AdjEM + b4 * AdjTempo + b_seed,
+    p = 1 / (1 + exp(-logit_p)),
+    final_four_sim = rbinom(n(), size = 1, prob = p)
+  )
 ```
 
+
+```{r}
+# Prior predictive probability
+gf_point(p ~ team_id | sim_number, 
+         data = prior_pred_df,
+         alpha = 0.5) +
+  labs(
+    title = "Prior Predictive Simulations (Final Four Probability)",
+    x = "Team ID",
+    y = "Simulated Probability (Prior Only)"
+  )
+```
+
+
+### Interpretation of the Prior Predictive Distribution
+
+Without utilizing any observed data, the prior predictive distribution shows the likelihood that a team would advance to the Final Four based only on samples from the previous distributions of the model parameters.
+
+#### Key Takeaways:
+
+- The histogram demonstrates that, under the prior alone, the odds of making it to the Final Four fluctuate throughout the whole [0, 1] range, with a notable bulk near **0 and 1**.
+
+- The faceted scatterplot (one panel per simulation) illustrates how the probability of the Final Four is impacted by preconceived notions about team metrics (such as Adjusted Offensive and Defensive Efficiency) for several hypothetical teams.
+
+- The distribution's shape indicates that the priors used (`Exponential(1)` for seed-level variation and `Normal(0,1.5)` for coefficients) are **weakly informative** but **flexible enough** to permit both high and low probability based on the simulated covariates.
+
+- The probability spread demonstrates that the model is not overconfident before to data viewing and that, when updated via posterior estimation, the model can learn from the data.
+
+Because it confirms that our priors encode appropriate uncertainty and do not compel the model to make irrational assumptions, this phase is crucial to Bayesian modeling.  Overly narrow priors may have been indicated if the majority of probability had clustered firmly around 0.5.  They would indicate overconfident, unrealistic priors if they were primarily at 0 or 1.
+
+#### Conclusion:
+Our prior predictive check confirms that the selected priors are suitable for learning from the real data in the following stage of the study since they achieve a decent balance between **regularization** and **flexibility**.
