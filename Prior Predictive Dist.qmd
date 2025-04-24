@@ -19,23 +19,28 @@ library(bayesplot)
 ```{r}
 #| include: false
 # load data_set
-dat <- read_csv("summary25_pt.csv")
+dat <- read_csv("all_seasons.csv")
+```
+
+```{r}
+data <- dat %>% mutate(final_four = ifelse(is.na(final_four), 0, final_four))
 ```
 
 
 ```{r}
 # Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
 
-dat <- dat %>%
+data <- data %>%
   mutate(final_four = ifelse(final_four >= 0, TRUE, FALSE))
+
 
 # check the class balance
 table(dat$final_four)
 ```
 
 ```{r}
-clean_data <- dat %>%
-  drop_na(final_four, seed, AdjOE, AdjDE, AdjEM, AdjTempo)
+clean_data <- data %>%
+  drop_na(seed, AdjOE, AdjDE, AdjEM, AdjTempo)
 nrow(clean_data)
 
 ```
@@ -45,14 +50,16 @@ dat <- list(
   final_four = as.integer(clean_data$final_four),
   AdjOE = scale(clean_data$AdjOE),
   AdjDE = scale(clean_data$AdjDE),
-  AdjEM = scale(clean_data$AdjEM),
+ AdjEM = scale(clean_data$AdjEM),
   AdjTempo = scale(clean_data$AdjTempo),
-  seed = clean_data$seed,
-  N = nrow(clean_data),
-  N_seeds = max(clean_data$seed, na.rm = TRUE)
+ seed = clean_data$seed
+ 
+#  N = nrow(clean_data),
+#  N_seeds = max(clean_data$seed, na.rm = TRUE)
 )
 
 ```
+
 
 ```{r}
 n_sim <- 10
@@ -90,11 +97,13 @@ m_mcmc <- ulam(
     b_seed[seed] ~ dnorm(0, sigma_seed),
     sigma_seed ~ dexp(1)
   ),
-  data = dat,
+  data = data,
   chains = 4,
   cores = 4,
   iter = 2000
 )
+
+summary(m_mcmc)
 
 ```
 
@@ -103,23 +112,21 @@ m_mcmc <- ulam(
 n_sim <- 1000
 
 # Simulate prior values for coefficients
-b1 <- rnorm(n_sim, 0, 1.5)
-b2 <- rnorm(n_sim, 0, 1.5)
-b3 <- rnorm(n_sim, 0, 1.5)
-b4 <- rnorm(n_sim, 0, 1.5)
+b1 <- rnorm(n_sim, -2.197225, 1)
+b2 <- rnorm(n_sim, -1.734601, 1)
+b4 <- rnorm(n_sim, -4.59512, 1)
+b5 <- rnorm(n_sim, -1.386294, 1)
 
 # Simulate group-level effects
-sigma_seed <- rexp(n_sim, 1)
-b_seed <- rnorm(n_sim, 0, sigma_seed)
 
 # Simulate standardized predictor values
 AdjOE <- rnorm(n_sim)
 AdjDE <- rnorm(n_sim)
-AdjEM <- rnorm(n_sim)
 AdjTempo <- rnorm(n_sim)
+b_seed <- rnorm(n_sim)
 
 # Linear predictor
-logit_p <- b1 * AdjOE + b2 * AdjDE + b3 * AdjEM + b4 * AdjTempo + b_seed
+logit_p <- b1 * AdjOE + b2 * AdjDE + b4 * AdjTempo + b5 * b_seed
 
 # Transform to probability
 p <- 1 / (1 + exp(-logit_p))
@@ -135,11 +142,15 @@ prior_sim_df <- tibble(
 
 # Plot histogram of prior predictive probabilities
 ggplot(prior_sim_df, aes(x = probability)) +
-  geom_histogram(bins = 40, fill = "maroon", color = "gold") +
+  geom_histogram(bins = 100, fill = "maroon", color = "gold") +
   labs(title = "Prior Predictive Distribution for Final Four",
        x = "Simulated Probability (Prior Only)",
        y = "Count") +
   theme_minimal()
+```
+
+```{r}
+logit(.2)
 ```
 
 ```{r}
