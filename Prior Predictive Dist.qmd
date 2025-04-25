@@ -80,6 +80,8 @@ glimpse(prior_pred_dists)
 
 ```
 
+
+
 ```{r}
 #| include: false
 m_mcmc <- ulam(
@@ -106,16 +108,22 @@ m_mcmc <- ulam(
 summary(m_mcmc)
 
 ```
+```{r}
+logit(.5)
+
+```
 
 ```{r}
+set.seed = 1
 # Set number of simulations
-n_sim <- 1000
+n_sim <- 3400 # 50 * 68
+target_probability = (4/68) #only 200 out of the 3400 teams will make a final four
 
 # Simulate prior values for coefficients
-b1 <- rnorm(n_sim, -2.197225, 1)
-b2 <- rnorm(n_sim, -1.734601, 1)
-b4 <- rnorm(n_sim, -4.59512, 1)
-b5 <- rnorm(n_sim, -1.386294, 1)
+b1 <- rnorm(n_sim, log(1.10), .2) # 1 sd in AjdOE gives a 10% increase of making a final four
+b2 <- rnorm(n_sim, log(1.15), .2)
+b4 <- rnorm(n_sim, 0, .2)
+b5 <- rnorm(n_sim, log(.7), .2)
 
 # Simulate group-level effects
 
@@ -128,8 +136,13 @@ b_seed <- rnorm(n_sim)
 # Linear predictor
 logit_p <- b1 * AdjOE + b2 * AdjDE + b4 * AdjTempo + b5 * b_seed
 
+logit_target <- logit(target_probability) 
+
+logit_p <- logit_p - (mean(logit_p) - logit_target) #scale down logit to more accurately reflect only 200 teams making it
+
 # Transform to probability
 p <- 1 / (1 + exp(-logit_p))
+
 
 # Simulate binary final_four outcome
 final_four_sim <- rbinom(n_sim, size = 1, prob = p)
@@ -149,9 +162,7 @@ ggplot(prior_sim_df, aes(x = probability)) +
   theme_minimal()
 ```
 
-```{r}
-logit(.2)
-```
+
 
 ```{r}
 # Teams to simulate per prior draw
@@ -168,7 +179,7 @@ prior_pred_df <- prior_pred_dists %>%
     AdjTempo = rnorm(n(), mean = 0, sd = 1)
   ) %>%
   mutate(
-    logit_p = b1 * AdjOE + b2 * AdjDE + b3 * AdjEM + b4 * AdjTempo + b_seed,
+    logit_p = b1 * AdjOE + b2 * AdjDE + b4 * AdjTempo + b5 * b_seed,
     p = 1 / (1 + exp(-logit_p)),
     final_four_sim = rbinom(n(), size = 1, prob = p)
   )
