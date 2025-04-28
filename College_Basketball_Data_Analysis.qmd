@@ -178,6 +178,12 @@ A Normal(0, 1.5) prior is assigned to each regression coefficient (β₁ to β�
 
 We assume that each seed group can vary significantly because β_seed[i] is taken from a normal distribution with its unique group-level standard deviation.  A hierarchical model with partial pooling is made possible by this structure, which acknowledges that various seeds may have distinct effects on the result while still drawing heavily from the population-level distribution.
 
+References
+
+	Gelman, Andrew, et al. Bayesian Data Analysis. 3rd ed., CRC Press, 2013.
+	
+	McElreath, Richard. Statistical Rethinking: A Bayesian Course with Examples in R and Stan. 2nd ed., CRC Press, 2020.
+  
 
 Prior Predictive Distribution
 
