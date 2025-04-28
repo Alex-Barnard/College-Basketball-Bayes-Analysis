@@ -1,0 +1,89 @@
+---
+title: "Fit It"
+format: html
+---
+
+```{r, echo=TRUE, results = 'hide', message=FALSE, warning=FALSE}
+library(dplyr)    
+library(tidyverse)
+library(ggformula)
+library(rstan)
+library(rethinking)
+library(CalvinBayes)
+library(tidybayes)
+library(bayesplot)
+```
+
+```{r}
+#| include: false
+# load data_set
+dat <- read_csv("all_seasons.csv")
+```
+
+```{r}
+data <- dat %>% mutate(final_four = ifelse(is.na(final_four), 0, final_four))
+```
+
+```{r}
+# Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
+
+data <- data %>%
+  mutate(final_four = ifelse(final_four >= 0, TRUE, FALSE))
+
+
+# check the class balance
+table(dat$final_four)
+```
+
+```{r}
+clean_data <- data %>%
+  drop_na(seed, AdjOE, AdjDE, AdjEM, AdjTempo)
+nrow(clean_data)
+
+```
+
+```{r}
+dat <- list(
+  final_four = as.integer(clean_data$final_four),
+  AdjOE = scale(clean_data$AdjOE),
+  AdjDE = scale(clean_data$AdjDE),
+ AdjEM = scale(clean_data$AdjEM),
+  AdjTempo = scale(clean_data$AdjTempo),
+ seed = clean_data$seed
+ 
+#  N = nrow(clean_data),
+#  N_seeds = max(clean_data$seed, na.rm = TRUE)
+)
+
+```
+
+```{r, results = 'hide'}
+
+m_mcmc <- ulam(
+  alist(
+    final_four ~ dbinom(1, p),
+    logit(p) <- b1*AdjOE + b2*AdjDE + b3*AdjTempo + b4*seed,
+    
+
+
+    # Priors for main effects
+    b1 ~ dnorm(logit(.1), .2), #AdjOE
+    b2 ~ dnorm(logit(.15), .2), #AdjDE
+    b3 ~ dnorm(0, .2), #tempo
+    b4 ~ dnorm(-logit(.2), .2) #seed
+
+ 
+  ),
+  data = dat,
+  chains = 4,
+  cores = 4,
+  iter = 2000
+)
+```
+
+```{r}
+precis(m_mcmc, depth =  2)
+traceplot_ulam(m_mcmc)
+```
+
+The fit will change into a more standard form than ulam. But the results can still be used as a proof of concept that the parameters chosen produce stable results.

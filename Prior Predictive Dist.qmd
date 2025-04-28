@@ -84,34 +84,51 @@ glimpse(prior_pred_dists)
 
 ```{r}
 #| include: false
+
+target_probability = (4/68)
+
 m_mcmc <- ulam(
   alist(
     final_four ~ dbinom(1, p),
-    logit(p) <- b1*AdjOE + b2*AdjDE + b3*AdjEM + b4*AdjTempo + b_seed[seed],
+    logit(p) <- b1*AdjOE + b2*AdjDE + b4*AdjTempo + b5*seed,
+    
+
 
     # Priors for main effects
-    b1 ~ dnorm(0, 1.5),
-    b2 ~ dnorm(0, 1.5),
-    b3 ~ dnorm(0, 1.5),
-    b4 ~ dnorm(0, 1.5),
+    b1 ~ dnorm(logit(.1), .2), #AdjOE
+    b2 ~ dnorm(logit(.15), .2), #AdjDE
+    b5 ~ dnorm(0, .2), #seed
+    b4 ~ dnorm(-logit(.2), .2) #temp
 
-    # Hierarchical prior for seed effects
-    b_seed[seed] ~ dnorm(0, sigma_seed),
-    sigma_seed ~ dexp(1)
+ 
   ),
-  data = data,
+  data = dat,
   chains = 4,
   cores = 4,
   iter = 2000
 )
-
-summary(m_mcmc)
-
 ```
+
+```{r}
+precis(m_mcmc, depth =  2)
+traceplot(m_mcmc)
+```
+
+
+
+```{r}
+final_four_post_samp <- as.data.frame(m_mcmc)
+```
+
+
+
+
+
+
 ```{r}
 set.seed = 1
 # Set number of simulations
-n_sim <- 1000 # 50 * 68
+n_sim <- 1000 # 
 target_probability = (4/68) #only 200 out of the 3400 teams will make a final four
 
 # Simulate prior values for coefficients
