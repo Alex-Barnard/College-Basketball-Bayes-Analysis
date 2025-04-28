@@ -13,6 +13,7 @@ library(rethinking)
 library(CalvinBayes)
 library(tidybayes)
 library(bayesplot)
+library(posterior)
 ```
 
 
@@ -23,15 +24,15 @@ dat <- read_csv("all_seasons.csv")
 ```
 
 ```{r}
-data <- dat %>% mutate(final_four = ifelse(is.na(final_four), 0, final_four))
+dat <- dat %>% mutate(final_four = ifelse(is.na(final_four), 0, final_four))
 ```
 
 
 ```{r}
 # Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
 
-data <- data %>%
-  mutate(final_four = ifelse(final_four >= 0, TRUE, FALSE))
+dat <- dat %>%
+  mutate(final_four = ifelse(final_four >= 1, TRUE, FALSE))
 
 
 # check the class balance
@@ -39,10 +40,9 @@ table(dat$final_four)
 ```
 
 ```{r}
-clean_data <- data %>%
+clean_data <- dat %>%
   drop_na(seed, AdjOE, AdjDE, AdjEM, AdjTempo)
 nrow(clean_data)
-
 ```
 
 ```{r}
@@ -90,15 +90,15 @@ target_probability = (4/68)
 m_mcmc <- ulam(
   alist(
     final_four ~ dbinom(1, p),
-    logit(p) <- b1*AdjOE + b2*AdjDE + b4*AdjTempo + b5*seed,
+    logit(p) <- b1*AdjOE + b2*AdjDE + b3*AdjTempo + b4*seed,
     
 
 
     # Priors for main effects
     b1 ~ dnorm(logit(.1), .2), #AdjOE
     b2 ~ dnorm(logit(.15), .2), #AdjDE
-    b5 ~ dnorm(0, .2), #seed
-    b4 ~ dnorm(-logit(.2), .2) #temp
+    b3 ~ dnorm(0, .2), #tempo
+    b4 ~ dnorm(-logit(.2), .2) #seed
 
  
   ),
@@ -108,6 +108,117 @@ m_mcmc <- ulam(
   iter = 2000
 )
 ```
+
+```{r}
+final_four_stan_model <- '
+data{
+    int<lower=1> n;
+    array[n] int final_four; //resp var
+    array[n] real AdjOE; 
+    array[n] real AdjDE; 
+    array[n] real AdjTempo; 
+    array[n] int seed; 
+}
+parameters{
+    real b1;
+    real b2;
+    real b3;
+    real b4;
+}
+model{
+    vector[n] p; 
+    b1 ~ normal(logit(.1), .2); //AdjOE
+    b2 ~ normal(logit(.15), .2); //AdjDE
+    b3 ~ normal(0, .2); //tempo
+    b4 ~ normal(-logit(.2), .2); //seed
+    for ( i in 1:n ) {
+        p[i] = inv_logit(b1 * AdjOE[i] + b2 * AdjDE[i] + b3 * AdjTempo[i] + b4 * seed[i]);
+    }
+    final_four ~ binomial( 1 , p ); // the 1 is for 1 "trial" per row of data
+}
+generated quantities{
+    vector[n] p;
+    for ( i in 1:n ) {
+        p[i] = inv_logit(b1 + b2 + b3 + b4);
+    }
+}
+'
+```
+
+```{r}
+list_data <- list(
+  n = 68*4,
+  final_four = as.integer(dat$final_four),
+  AdjOE = as.numeric(dat$AdjOE),
+  AdjDE = as.numeric(dat$AdjDE),
+  AdjTempo = as.numeric(dat$AdjTempo),
+  seed = as.integer(dat$seed)
+)
+```
+
+
+
+```{r}
+final_four_binom_fit <- rethinking::stan(model_code = final_four_stan_model,
+                        data = list_data,
+                        chains = 4,
+                        iter = 2000,
+                        refresh = 0)
+```
+```{r}
+final_four_post_samp <- as_draws_df(final_four_binom_fit) |> 
+  as.data.frame()
+
+
+
+#final_four_post_samp <- as.data.frame(final_four_binom_fit) 
+names(final_four_post_samp) |> head(30)
+
+names(final_four_post_samp) <- str_replace_all(names(final_four_post_samp),
+                                       pattern = fixed('['),
+                                       replacement = '_')
+
+names(final_four_post_samp) <- str_replace_all(names(final_four_post_samp),
+                                       pattern = fixed(']'),
+                                       replacement = '')
+names(final_four_post_samp) |> head(30)
+```
+
+```{r}
+final_four_post_probs <- final_four_post_samp |>
+  select(starts_with("p_")) |> # keep only the p posteriors, not other parameters
+  mutate(post_samp_num = c(1:nrow(final_four_post_samp))) |>
+  pivot_longer(cols = starts_with('p_'),
+               names_to = "orig_data_row",
+               values_to = 'p',
+               names_transform = parse_number) |>
+  # keep a random subset to prevent having millions of rows of samples
+  slice_sample(n = 50000)
+
+# add row numbers to original dataset
+clean_data <- clean_data |>
+  mutate(orig_data_row = c(1:nrow(clean_data)))
+
+# put together original dataset (predictor variable values!) w/posterior p's
+data_with_post_probs <- left_join(clean_data, 
+                                  final_four_post_probs, 
+                                  by = 'orig_data_row')
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(data_with_post_probs, aes(x = AdjOE, y = p)) +
+  geom_point(alpha = 0.1, size = 0.5) +  # lots of points = low alpha
+  geom_smooth(method = "loess", color = "blue") +  # trend line
+  labs(
+    title = "Final Four probability vs Adjusted Offensive Efficiency",
+    x = "AdjOE (Offensive Efficiency)",
+    y = "Posterior Final Four probability"
+  ) +
+  theme_minimal()
+```
+
 
 ```{r}
 precis(m_mcmc, depth =  2)
