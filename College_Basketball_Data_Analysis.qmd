@@ -27,7 +27,7 @@ library(ggformula)
 ```{r}
 #| include: false
 # load data_set
-data <- read_csv("summary25_pt.csv")
+data <- read_csv("all_seasons.csv")
 ```
 
 ```{r}
@@ -68,15 +68,18 @@ This is a binary variable indicating whether a team made it to the Final Four (T
 
 - Other predictors may include AdjDE, AdjTempo, AdjEM(Efficiency Margin).
 
+
 ```{r}
 # Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
 
 data <- data %>%
-  mutate(final_four = ifelse(final_four >= 0, TRUE, FALSE))
+  mutate(final_four = if_else(final_four == 1, TRUE, FALSE))
 
-# check the class balance
+# Check the class balance
 table(data$final_four)
 ```
+
+
 
 
 ```{r}
