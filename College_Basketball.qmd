@@ -1,0 +1,467 @@
+---
+title: "College_Basketball_Data_Analysis"
+authors: 
+  - Blessing Amoah
+  - Alex Barnard
+  - Fengyi Li
+format: 
+  html:
+    code-tools: true
+    toc: true
+    embed-resources: true
+editor: source
+---
+
+```{r}
+#| include: false
+
+library(dplyr)    
+library(tidyverse)
+library(ggformula)
+library(rstan)
+library(rethinking)
+library(CalvinBayes)
+library(tidybayes)
+library(bayesplot)
+library(posterior)
+library(dagitty)
+library(ggdag)
+library(posterior)
+```
+
+```{r}
+#| include: false
+# load data_set
+data <- read_csv("all_seasons.csv")
+```
+
+```{r}
+# glimpse of the data
+glimpse(data)
+```
+
+## Data Source
+
+This data includes metrics such as:
+
+- Tempo (pace of play)
+
+- Offensive/Defensive Efficiency (OE/DE)
+
+- Adjusted metrics (AdjOE, AdjDE)
+
+- Team seeds which indicates their tournament ranking.
+
+## Research question
+
+Our goal is to answer the question:
+
+What is the probability that a team reaches the Final Four, based on its adjusted offensive efficiency (AdjOE), adjusted defensive efficiency (AdjDE), and adjusted tempo (AdjTempo)?
+
+We aim to identify which team characteristics, among these core performance metrics, most strongly predict tournament success.
+
+
+## Variables of Interest
+
+- Response variable: Final_four
+
+This is a binary variable indicating whether a team made it to the Final Four (TRUE) or not (FALSE)
+
+- Key predictor: AdjOE thus Adjusted Offensive Efficiency
+
+- Other predictors may include AdjDE, AdjTempo.  
+
+
+```{r}
+# Convert Final Four appearance to binary (TRUE if team reached Final Four, FALSE otherwise)
+
+data <- data %>%
+  mutate(final_four = if_else(final_four == 1, TRUE, FALSE))
+
+# Check the class balance
+table(data$final_four)
+```
+
+```{r}
+
+#| echo: false
+
+offensive_defensive_metrics <- dagitty("dag{
+  AdjOE -> Final_Four;
+  AdjDE -> Final_Four;
+  AdjTempo -> Final_Four;
+  seed -> Final_Four;
+  Tempo -> AdjTempo;
+  OE -> AdjOE;
+  DE -> AdjDE;
+}")
+
+ggdag(offensive_defensive_metrics) +
+  theme(plot.margin = margin(15, 15, 15, 15))
+```
+Interpretation
+
+The causal diagram illustrates the assumed relationships between the variables in our analysis. The primary goal is to model the probability of a team reaching the Final Four (Final_Four) based on several performance metrics.
+
+- Predictors Included: We will include AdjOE, AdjDE, and AdjTempo as direct predictors of Final_Four. These variables represent adjusted offensive efficiency, adjusted defensive efficiency, and adjusted tempo, respectively.
+
+- Predictors Excluded: We will not directly include OE, DE, and Tempo in the model. This is because these variables are assumed to determine AdjOE, AdjDE, and AdjTempo. Including both the original and adjusted metrics would introduce multicollinearity, as the adjusted metrics are, in part, derived from the original ones. Multicollinearity makes it difficult to isolate the independent effect of each predictor.
+
+
+
+Model Description
+
+$$
+\text{final\_four}_i \sim \text{Binomial}(1, p_i)
+$$
+
+$$
+\text{logit}(p_i) = \beta_1 \cdot \text{AdjOE}_i + \beta_2 \cdot \text{AdjDE}_i + \beta_3 \cdot \text{AdjTempo}_i + \alpha_{\text{seed}[i]}
+$$
+
+
+Priors
+
+```{r}
+clean_data <- data %>%
+  drop_na(final_four, seed, AdjOE, AdjDE, AdjTempo) %>%
+  mutate(seed = as.integer(as.factor(seed)))
+nrow(clean_data)
+```
+
+```{r}
+dat <- list(
+  n = nrow(clean_data),
+  final_four = as.integer(clean_data$final_four),
+  AdjOE = as.numeric(scale(clean_data$AdjOE)),
+  AdjDE = as.numeric(scale(clean_data$AdjDE)),
+  AdjTempo = as.numeric(scale(clean_data$AdjTempo)),
+  S = length(unique(clean_data$seed)),
+  seed = clean_data$seed
+)
+```
+
+```{r}
+final_four_stan_model <- '
+data {
+  int<lower=1> n;
+  array[n] int final_four;
+  array[n] real AdjOE;
+  array[n] real AdjDE;
+  array[n] real AdjTempo;
+  int<lower=1> S;
+  array[n] int seed;
+}
+
+parameters {
+  real b1;
+  real b2;
+  real b3;
+  vector[S] alpha_seed;
+}
+
+model {
+  vector[n] p;
+
+  b1 ~ normal(logit(0.10), 0.2);
+  b2 ~ normal(logit(0.15), 0.2);
+  b3 ~ normal(0, 0.2);
+  alpha_seed ~ normal(0, 1);
+
+  for (i in 1:n) {
+    p[i] = inv_logit(alpha_seed[seed[i]] + 
+                     b1 * AdjOE[i] + 
+                     b2 * AdjDE[i] + 
+                     b3 * AdjTempo[i]);
+  }
+
+  final_four ~ binomial(1, p);
+}
+
+generated quantities {
+  vector[n] p;
+  vector[n] log_lik;
+  for (i in 1:n) {
+    p[i] = inv_logit(alpha_seed[seed[i]] + 
+                     b1 * AdjOE[i] + 
+                     b2 * AdjDE[i] + 
+                     b3 * AdjTempo[i]);
+    log_lik[i] = binomial_lpmf(final_four[i] | 1, p[i]);
+  }
+}
+'
+```
+
+
+```{r}
+#| include: false
+
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+# Compile the model
+stan_model_compiled <- stan_model(model_code = final_four_stan_model)
+
+fit_final_four <- sampling(
+  stan_model_compiled,
+  data = dat,
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  seed = 123
+)
+```
+
+```{r}
+print(fit_final_four, pars = c("b1", "b2", "b3"), probs = c(0.055, 0.945))
+traceplot(fit_final_four, pars = c("b1", "b2", "b3"))
+
+```
+
+
+## Prior Rationale
+
+Choice of Distribution:
+- We use normal distributions for the priors of β1 (AdjOE), β2 (AdjDE), and β3 (AdjTempo) because the coefficients in a logistic regression represent the change in the log-odds of the outcome for a one-unit change in the predictor. Normal distributions are suitable for these coefficients as they allow for both positive and negative effects, and they are symmetric around a central value, representing our best guess.
+
+Prior for β1 (AdjOE):
+- Prior Distribution: β1 ~ Normal(logit(0.10), 0.2)
+- Prior Mean (logit(0.10)): We set the prior mean to logit(0.10). This implies that, before seeing the data, we expect a one standard deviation increase in AdjOE to increase the odds of reaching the Final Four by a factor corresponding to a change from 50% probability to approximately 52.5%. A probability of 0.10 is a conservative expectation of the influence of AdjOE.
+- Prior Standard Deviation (0.2): A standard deviation of 0.2 reflects moderate uncertainty. It allows for a reasonable range of effect sizes, with 95% of the prior probability falling roughly between logit(0.10) - 0.4 and logit(0.10) + 0.4.
+
+Prior for β2 (AdjDE):
+- Prior Distribution: β2 ~ Normal(logit(0.15), 0.2)
+- Prior Mean (logit(0.15)): We set the prior mean to logit(0.15). Since AdjDE is negatively related to Final Four probability, this implies that, before seeing the data, we expect a one standard deviation increase in AdjDE to decrease the odds of reaching the Final Four.
+- Prior Standard Deviation (0.2): Same as above, indicating moderate uncertainty.
+
+Prior for β3 (AdjTempo):
+- Prior Distribution: β3 ~ Normal(0, 0.2)
+- Prior Mean (0): We set the prior mean to 0. This expresses our initial belief that adjusted tempo may have little to no effect on the probability of reaching the Final Four.
+- Prior Standard Deviation (0.2): Again, this reflects moderate uncertainty, allowing for tempo to have either a small positive or negative effect.
+
+References
+
+- Gelman, Andrew, et al. Bayesian Data Analysis. 3rd ed., CRC Press, 2013.
+- McElreath, Richard. Statistical Rethinking: A Bayesian Course with Examples in R and Stan. 2nd ed., CRC Press, 2020.
+
+
+Prior Predictive Distribution
+
+```{r}
+# Simulate Prior Predictive Distribution
+
+# Number of simulations
+n_sim <- 1000
+
+# Sample from priors
+b1_prior <- rnorm(n_sim, logit(0.10), 0.2)
+b2_prior <- rnorm(n_sim, logit(0.15), 0.2)
+b3_prior <- rnorm(n_sim, 0, 0.2)
+b4_prior <- rnorm(n_sim, 0, 1) 
+
+# Create a sequence of predictor values (scaled)
+AdjOE_seq <- seq(-2, 2, length.out = 50)
+AdjDE_seq <- seq(-2, 2, length.out = 50)
+AdjTempo_seq <- seq(-2, 2, length.out = 50)
+
+# Create empty matrices to store predictions
+p_prior <- matrix(NA, nrow = n_sim, ncol = length(AdjOE_seq))
+
+# Simulate probabilities
+for (i in 1:n_sim) {
+  for (j in 1:length(AdjOE_seq)) {
+    # Using the same values for all predictors for simplicity
+    log_odds <- b4_prior[i] +  b1_prior[i] * AdjOE_seq[j] + b2_prior[i] * AdjDE_seq[j] + b3_prior[i] * AdjTempo_seq[j]
+    p_prior[i, j] <- inv_logit(log_odds)
+  }
+}
+
+# Average the probabilities across simulations
+mean_p_prior <- colMeans(p_prior)
+
+# Plot the prior predictive distribution
+plot(AdjOE_seq, mean_p_prior, type = "l", 
+     xlab = "Scaled AdjOE", ylab = "Probability of Final Four",
+     main = "Prior Predictive Distribution")
+```
+
+Interpretation
+
+- The plot shows the average predicted probability of reaching the Final Four as a function of the scaled AdjOE.
+
+The prior predictive distribution suggests:
+- The model can predict probabilities across the entire range (0 to 1).
+- The average predicted probability varies smoothly with AdjOE, as expected in logistic regression.
+- The prior does not seem to produce any wildly unrealistic predictions.
+
+-  we incorporated the prior distribution for the seed-level intercept (alpha_seed ~ Normal(0, 1)) into the log-odds computation via b4_prior. This reflects uncertainty about baseline differences in teams’ likelihood to reach the Final Four based on seed. 
+
+
+Fit the Model
+
+```{r}
+
+#| include: false
+
+# Compile model from string
+stan_model_compiled <- stan_model(model_code = final_four_stan_model)
+
+# Fit the model using Stan (MCMC)
+
+fit_final_four <- sampling(
+  stan_model_compiled,
+  data = dat,
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  seed = 123
+)
+
+```
+```{r}
+
+print(fit_final_four)
+```
+
+Present Posterior
+
+```{r}
+# Extract posterior samples
+posterior_samples <- as.data.frame(fit_final_four)
+
+posterior_summary <- posterior_samples %>%
+  summarize(
+    mean_b1 = mean(b1),
+    median_b1 = median(b1),
+    ci_lower_b1 = quantile(b1, 0.025),
+    ci_upper_b1 = quantile(b1, 0.975),
+    mean_b2 = mean(b2),
+    median_b2 = median(b2),
+    ci_lower_b2 = quantile(b2, 0.025),
+    ci_upper_b2 = quantile(b2, 0.975),
+    mean_b3 = mean(b3),
+    median_b3 = median(b3),
+    ci_lower_b3 = quantile(b3, 0.025),
+    ci_upper_b3 = quantile(b3, 0.975)
+  )
+
+print(posterior_summary)
+```
+
+```{r}
+plot_posterior <- function(param_name, title) {
+  ggplot(posterior_samples, aes(x = .data[[param_name]])) +
+    geom_density() +
+    ggtitle(title) +
+    xlab("Coefficient Value") +
+    ylab("Density")
+}
+
+plot_posterior("b1", "Posterior of AdjOE Coefficient")
+plot_posterior("b2", "Posterior of AdjDE Coefficient")
+plot_posterior("b3", "Posterior of AdjTempo Coefficient")
+```
+
+Interpretation
+
+- The posterior_summary shows the mean, median, and 95% credible intervals for each coefficient.
+- The density plots visualize the shape of the posterior distributions.
+
+
+Model Comparison
+
+```{r}
+reduced_model_code <- '
+data {
+  int<lower=1> n;
+  array[n] int final_four;
+  array[n] real AdjOE;
+}
+
+parameters {
+  real b1;
+}
+
+model {
+  vector[n] p;
+  b1 ~ normal(logit(0.10), 0.2);
+
+  for (i in 1:n) {
+    p[i] = inv_logit(b1 * AdjOE[i]);
+  }
+
+  final_four ~ binomial(1, p);
+}
+
+generated quantities {
+  vector[n] p;
+  vector[n] log_lik;
+  for (i in 1:n) {
+    p[i] = inv_logit(b1 * AdjOE[i]);
+    log_lik[i] = binomial_lpmf(final_four[i] | 1, p[i]);
+  }
+}
+'
+```
+
+
+```{r}
+#| include: false
+
+# Compile directly from string
+reduced_model <- stan_model(model_code = reduced_model_code)
+
+fit_reduced <- sampling(
+  reduced_model,
+  data = list(
+    n = dat$n,
+    final_four = dat$final_four,
+    AdjOE = dat$AdjOE
+  ),
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  seed = 123
+)
+```
+
+```{r}
+# Extract log-likelihood matrices
+log_lik_full <- rstan::extract(fit_final_four, pars = "log_lik")$log_lik
+log_lik_reduced <- rstan::extract(fit_reduced, pars = "log_lik")$log_lik
+
+compute_waic <- function(log_lik_matrix) {
+  lppd <- sum(log(colMeans(exp(log_lik_matrix))))
+  p_waic <- sum(apply(log_lik_matrix, 2, var))
+  waic <- -2 * (lppd - p_waic)
+  return(list(WAIC = waic, lppd = lppd, p_waic = p_waic))
+}
+
+waic_full <- compute_waic(log_lik_full)
+waic_reduced <- compute_waic(log_lik_reduced)
+
+print(paste("WAIC Full Model:", round(waic_full$WAIC, 2)))
+print(paste("WAIC Reduced Model:", round(waic_reduced$WAIC, 2)))
+```
+
+Interpretation
+
+- We fit a simpler model (e.g., with only AdjOE).
+- WAIC  is used to compare the models. Lower WAIC generally indicates a better predictive fit which the reduced model shows.
+
+```{r}
+# MCMC diagnostics
+rhats <- rhat(fit_final_four)
+print(summary(rhats))
+mcmc_trace(fit_final_four, pars = c("b1", "b2", "b3"))
+```
+
+```{r}
+posterior_samples %>%
+  select(starts_with("alpha_seed")) %>%
+  pivot_longer(cols = everything(), names_to = "seed_level", values_to = "value") %>%
+  group_by(seed_level) %>%
+  summarize(mean = mean(value)) %>%
+  gf_point(mean ~ seed_level)
+```
+
