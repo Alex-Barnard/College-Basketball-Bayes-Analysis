@@ -175,12 +175,14 @@ table(dat_all_teams$final_four)
 
 ```{r}
 dat_all_teams <- list(
+  n = nrow(dat_all_teams)
   final_four = as.integer(dat_all_teams$final_four),
   AdjOE = scale(dat_all_teams$AdjOE),
   AdjDE = scale(dat_all_teams$AdjDE),
- AdjEM = scale(dat_all_teams$AdjEM),
+  AdjEM = scale(dat_all_teams$AdjEM),
   AdjTempo = scale(dat_all_teams$AdjTempo),
- seed = dat_all_teams$seed
+  seed = dat_all_teams$seed,
+ 
  
 #  N = nrow(clean_data),
 #  N_seeds = max(clean_data$seed, na.rm = TRUE)
@@ -255,7 +257,7 @@ final_four_sim <- rbinom(n_sim, size = 1, prob = mean_p_prior)
 # Plot histogram of prior predictive probabilities
 ggplot(prior_sim_df, aes(x = probability)) +
   geom_histogram(bins = 100, fill = "maroon", color = "gold") +
-  labs(title = "Prior Predictive Distribution for Final Four",
+  labs(title = "Prior Predictive Distribution for Final Four Only",
        x = "Simulated Probability (Prior Only)",
        y = "Count") +
   theme_minimal()
@@ -312,7 +314,7 @@ prior_sim_df <- tibble(
 # Plot histogram of prior predictive probabilities
 ggplot(prior_sim_df, aes(x = probability)) +
   geom_histogram(bins = 100, fill = "maroon", color = "gold") +
-  labs(title = "Prior Predictive Distribution for Final Four",
+  labs(title = "Prior Predictive Distribution for Final Four all teams",
        x = "Simulated Probability (Prior Only)",
        y = "Count") +
   theme_minimal()
@@ -329,6 +331,86 @@ The prior predictive distribution suggests:
 
 -  we incorporated the prior distribution for the seed-level intercept (alpha_seed ~ Normal(0, 1)) into the log-odds computation via b4_prior. This reflects uncertainty about baseline differences in teams’ likelihood to reach the Final Four based on seed. 
 
+
+all teams post
+
+```{r}
+no_categorical_stan_model <- '
+data{
+    int<lower=1> n;
+    array[n] int final_four; //resp var
+    array[n] real AdjOE; 
+    array[n] real AdjDE; 
+    array[n] real AdjTempo; 
+    array[n] int seed; 
+}
+parameters{
+    real b1;
+    real b2;
+    real b3;
+    real b4;
+}
+model{
+    vector[n] p; 
+    b1 ~ normal(logit(.1), .2); //AdjOE
+    b2 ~ normal(logit(.15), .2); //AdjDE
+    b3 ~ normal(0, .2); //tempo
+    b4 ~ normal(-logit(.2), .2); //seed
+    for ( i in 1:n ) {
+        p[i] = inv_logit(b1 * AdjOE[i] + b2 * AdjDE[i] + b3 * AdjTempo[i] + b4 * seed[i]);
+    }
+    final_four ~ binomial( 1 , p ); // the 1 is for 1 "trial" per row of data
+}
+generated quantities{
+    vector[n] p;
+    vector[n] log_lik;
+    for ( i in 1:n ) {
+        p[i] = inv_logit(b1 + b2 + b3 + b4);
+        log_lik[i] = binomial_lpmf(final_four[i] | 1, p[i]);
+    }
+}
+'
+```
+
+```{r}
+#| include: false
+
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+# Compile the model
+no_categorial_stan_model_compiled <- stan_model(model_code = no_categorical_stan_model)
+
+stan_data <- list(
+  n = nrow(dat_all_teams),
+  final_four = dat_all_teams$final_four,  # Replace with your actual outcome variable
+  AdjOE = dat_all_teams$AdjOE,         # Replace with your actual predictor
+  AdjDE = dat_all_teams$AdjDE,        # Replace with your actual predictor
+  AdjTempo = dat_all_teams$AdjTempo,       # Replace with your actual predictor
+  seed = dat_all_teams$seed         # Replace with your actual predictor
+)
+
+
+fit_no_cat <- sampling(
+  no_categorial_stan_model_compiled,
+  data = stan_data,
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  seed = 123
+)
+```
+
+
+```{r}
+print(fit_no_cat, pars = c("b1", "b2", "b3", "b4"), probs = c(0.055, 0.945))
+traceplot(fit_no_cat, pars = c("b1", "b2", "b3", "b4"))
+```
+
+
+```{r}
+print(fit_no_cat)
+```
 
 
 final four teams only posterior
@@ -408,25 +490,7 @@ fit_final_four_only <- sampling(
 print(fit_final_four_only, pars = c("b1", "b2", "b3"), probs = c(0.055, 0.945))
 traceplot(fit_final_four_only, pars = c("b1", "b2", "b3"))
 ```
-```{r}
 
-#| include: false
-
-# Compile model from string
-final_four_only_stan_model_compiled <- stan_model(model_code = final_four_only_stan_model)
-
-# Fit the model using Stan (MCMC)
-
-fit_final_four_only <- sampling(
-  final_four_only_stan_model_compiled,
-  data = dat_final_four_only,
-  chains = 4,
-  iter = 2000,
-  warmup = 1000,
-  seed = 123
-)
-
-```
 
 ```{r}
 print(fit_final_four_only)
@@ -516,64 +580,6 @@ generated quantities {
 '
 ```
 
-```{r}
-no_categorical_model_code <- '
-data{
-    int<lower=1> n;
-    array[n] int final_four; //resp var
-    array[n] real AdjOE; 
-    array[n] real AdjDE; 
-    array[n] real AdjTempo; 
-    array[n] int seed; 
-}
-parameters{
-    real b1;
-    real b2;
-    real b3;
-    real b4;
-}
-model{
-    vector[n] p; 
-    b1 ~ normal(logit(.1), .2); //AdjOE
-    b2 ~ normal(logit(.15), .2); //AdjDE
-    b3 ~ normal(0, .2); //tempo
-    b4 ~ normal(-logit(.2), .2); //seed
-    for ( i in 1:n ) {
-        p[i] = inv_logit(b1 * AdjOE[i] + b2 * AdjDE[i] + b3 * AdjTempo[i] + b4 * seed[i]);
-    }
-    final_four ~ binomial( 1 , p ); // the 1 is for 1 "trial" per row of data
-}
-generated quantities{
-    vector[n] p;
-    for ( i in 1:n ) {
-        p[i] = inv_logit(b1 + b2 + b3 + b4);
-    }
-}
-'
-```
-
-```{r}
-#| include: false
-
-# Compile directly from string
-no_categorical_model <- stan_model(model_code = no_categorical_model_code)
-
-fit_reduced <- sampling(
-  no_categorical_model,
-  data = list(
-    n = dat_final_four_only$n,
-    final_four = dat_final_four_only$final_four,
-    AdjOE = dat_final_four_only$AdjOE,
-    AdjDE = dat_final_four_only$AdjDE,
-    AdjTempo = dat_final_four_only$AdjTempo,
-    seed = dat_final_four_only$seed
-  ),
-  chains = 4,
-  iter = 2000,
-  warmup = 1000,
-  seed = 123
-)
-```
 
 ```{r}
 #| include: false
@@ -596,9 +602,33 @@ fit_reduced <- sampling(
 ```
 
 ```{r}
+#| include: false
+
+# Compile directly from string
+no_categorical_model <- stan_model(model_code = no_categorical_model_code)
+
+fit_reduced <- sampling(
+  no_categorical_model,
+  data = list(
+    n = dat_all_teams$n,
+    final_four = dat_all_teams$final_four,
+    AdjOE = dat_all_teams$AdjOE,
+    AdjDE = dat_all_teams$AdjDE,
+    AdjTempo = dat_all_teams$AdjTempo,
+    seed = dat_all_teams$seed
+  ),
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  seed = 123
+)
+```
+
+```{r}
 # Extract log-likelihood matrices
 log_lik_full <- rstan::extract(fit_final_four_only, pars = "log_lik")$log_lik
 log_lik_reduced <- rstan::extract(fit_reduced, pars = "log_lik")$log_lik
+log_lik_no_cat <- rstan::extract(fit_no_cat, pars = "log_lik")$log_lik
 
 compute_waic <- function(log_lik_matrix) {
   lppd <- sum(log(colMeans(exp(log_lik_matrix))))
@@ -609,10 +639,14 @@ compute_waic <- function(log_lik_matrix) {
 
 waic_full <- compute_waic(log_lik_full)
 waic_reduced <- compute_waic(log_lik_reduced)
+waic_no_cat <- compute_waic(log_lik_reduced)
 
 print(paste("WAIC Full Model:", round(waic_full$WAIC, 2)))
 print(paste("WAIC Reduced Model:", round(waic_reduced$WAIC, 2)))
+print(paste("WAIC no categorical:", round(waic_no_cat$WAIC, 2)))
 ```
+
+
 
 Interpretation
 
