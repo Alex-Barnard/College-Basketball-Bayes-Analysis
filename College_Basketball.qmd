@@ -224,6 +224,7 @@ Prior Predictive Distribution of final four teams only
 
 # Number of simulations
 n_sim <- 1000
+target_probability = (4/68) 
 
 # Sample from priors
 b1_prior <- rnorm(n_sim, logit(0.10), 0.2)
@@ -232,18 +233,20 @@ b3_prior <- rnorm(n_sim, 0, 0.2)
 b4_prior <- rnorm(n_sim, 0, 1) 
 
 # Create a sequence of predictor values (scaled)
-AdjOE_seq <- seq(-2, 2, length.out = 50)
-AdjDE_seq <- seq(-2, 2, length.out = 50)
-AdjTempo_seq <- seq(-2, 2, length.out = 50)
+AdjOE_seq <- seq(-2, 2, length.out = n_sim)
+AdjDE_seq <- seq(-2, 2, length.out = n_sim)
+AdjTempo_seq <- seq(-2, 2, length.out = n_sim)
 
 # Create empty matrices to store predictions
 p_prior <- matrix(NA, nrow = n_sim, ncol = length(AdjOE_seq))
+
+logit_target <- target_probability 
 
 # Simulate probabilities
 for (i in 1:n_sim) {
   for (j in 1:length(AdjOE_seq)) {
     # Using the same values for all predictors for simplicity
-    log_odds <- b4_prior[i] +  b1_prior[i] * AdjOE_seq[j] + b2_prior[i] * AdjDE_seq[j] + b3_prior[i] * AdjTempo_seq[j]
+    log_odds <- b4_prior[i] +  b1_prior[i] * AdjOE_seq[j] + b2_prior[i] * AdjDE_seq[j] + b3_prior[i] * AdjTempo_seq[j] 
     p_prior[i, j] <- inv_logit(log_odds)
   }
 }
@@ -314,7 +317,7 @@ prior_sim_df <- tibble(
 # Plot histogram of prior predictive probabilities
 ggplot(prior_sim_df, aes(x = probability)) +
   geom_histogram(bins = 100, fill = "maroon", color = "gold") +
-  labs(title = "Prior Predictive Distribution for Final Four all teams",
+  labs(title = "Prior Predictive Distribution for Final Four all teams and no categorical",
        x = "Simulated Probability (Prior Only)",
        y = "Count") +
   theme_minimal()
@@ -718,7 +721,7 @@ final_four_only_posterior_samples %>%
 
 Discussion Questions & Answers
 
-What is the probability that a team reaches the Final Four, based on its adjusted offensive efficiency (AdjOE), adjusted defensive efficiency (AdjDE), and adjusted tempo (AdjTempo), and seed line (seed)?
+What is the probability that a team reaches the Final Four, based on its adjusted offensive efficiency (AdjOE), adjusted defensive efficiency (AdjDE), and adjusted tempo (AdjTempo), and seed line (Seed)?
 
 Adjusted Offensive Efficiency (AdjOE)
 
