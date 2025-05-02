@@ -718,7 +718,7 @@ final_four_only_posterior_samples %>%
 
 Discussion Questions & Answers
 
-What is the probability that a team reaches the Final Four, based on its adjusted offensive efficiency (AdjOE), adjusted defensive efficiency (AdjDE), and adjusted tempo (AdjTempo)?
+What is the probability that a team reaches the Final Four, based on its adjusted offensive efficiency (AdjOE), adjusted defensive efficiency (AdjDE), and adjusted tempo (AdjTempo), and seed line (seed)?
 
 Adjusted Offensive Efficiency (AdjOE)
 
