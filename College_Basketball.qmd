@@ -1,3 +1,4 @@
+
 ---
 title: "College_Basketball_Data_Analysis"
 authors: 
@@ -107,8 +108,6 @@ The causal diagram illustrates the assumed relationships between the variables i
 
 - Predictors Excluded: We will not directly include OE, DE, and Tempo in the model. This is because these variables are assumed to determine AdjOE, AdjDE, and AdjTempo. Including both the original and adjusted metrics would introduce multicollinearity, as the adjusted metrics are, in part, derived from the original ones. Multicollinearity makes it difficult to isolate the independent effect of each predictor.
 
-
-
 Model Description
 
 $$
@@ -175,13 +174,13 @@ table(dat_all_teams$final_four)
 
 ```{r}
 dat_all_teams <- list(
-  n = nrow(dat_all_teams)
+  n = nrow(dat_all_teams),
   final_four = as.integer(dat_all_teams$final_four),
   AdjOE = scale(dat_all_teams$AdjOE),
   AdjDE = scale(dat_all_teams$AdjDE),
   AdjEM = scale(dat_all_teams$AdjEM),
   AdjTempo = scale(dat_all_teams$AdjTempo),
-  seed = dat_all_teams$seed,
+  seed = dat_all_teams$seed
  
  
 #  N = nrow(clean_data),
@@ -255,6 +254,7 @@ mean_p_prior <- colMeans(p_prior)
 final_four_sim <- rbinom(n_sim, size = 1, prob = mean_p_prior)
 
 # Plot histogram of prior predictive probabilities
+prior_sim_df <- data.frame(probability = mean_p_prior)
 ggplot(prior_sim_df, aes(x = probability)) +
   geom_histogram(bins = 100, fill = "maroon", color = "gold") +
   labs(title = "Prior Predictive Distribution for Final Four Only",
@@ -382,12 +382,12 @@ options(mc.cores = parallel::detectCores())
 no_categorial_stan_model_compiled <- stan_model(model_code = no_categorical_stan_model)
 
 stan_data <- list(
-  n = nrow(dat_all_teams),
-  final_four = dat_all_teams$final_four,  # Replace with your actual outcome variable
-  AdjOE = dat_all_teams$AdjOE,         # Replace with your actual predictor
-  AdjDE = dat_all_teams$AdjDE,        # Replace with your actual predictor
-  AdjTempo = dat_all_teams$AdjTempo,       # Replace with your actual predictor
-  seed = dat_all_teams$seed         # Replace with your actual predictor
+  n = dat_all_teams$n,
+  final_four = as.integer(dat_all_teams$final_four),
+  AdjOE = as.numeric(dat_all_teams$AdjOE),
+  AdjDE = as.numeric(dat_all_teams$AdjDE),
+  AdjTempo = as.numeric(dat_all_teams$AdjTempo),
+  seed = as.integer(dat_all_teams$seed)
 )
 
 
@@ -602,20 +602,67 @@ fit_reduced <- sampling(
 ```
 
 ```{r}
+no_categorical_model_code <- '
+data {
+  int<lower=1> n;                    // number of observations
+  array[n] int final_four;           // binary response: made Final Four
+  array[n] real AdjOE;               // adjusted offensive efficiency
+  array[n] real AdjDE;               // adjusted defensive efficiency
+  array[n] real AdjTempo;            // adjusted tempo
+  array[n] int seed;                 // seed as a continuous predictor
+}
+
+parameters {
+  real b1;                           // coefficient for AdjOE
+  real b2;                           // coefficient for AdjDE
+  real b3;                           // coefficient for AdjTempo
+  real b4;                           // coefficient for seed
+}
+
+model {
+  vector[n] p;
+
+  // Priors
+  b1 ~ normal(logit(0.10), 0.2);     // AdjOE
+  b2 ~ normal(logit(0.15), 0.2);     // AdjDE
+  b3 ~ normal(0, 0.2);               // AdjTempo
+  b4 ~ normal(-logit(0.20), 0.2);    // Seed effect 
+
+  // Likelihood
+  for (i in 1:n) {
+    p[i] = inv_logit(b1 * AdjOE[i] + b2 * AdjDE[i] + b3 * AdjTempo[i] + b4 * seed[i]);
+  }
+
+  final_four ~ binomial(1, p);
+}
+
+generated quantities {
+  vector[n] p;
+  vector[n] log_lik;
+
+  for (i in 1:n) {
+    p[i] = inv_logit(b1 * AdjOE[i] + b2 * AdjDE[i] + b3 * AdjTempo[i] + b4 * seed[i]);
+    log_lik[i] = binomial_lpmf(final_four[i] | 1, p[i]);
+  }
+}
+'
+```
+
+```{r}
 #| include: false
 
 # Compile directly from string
 no_categorical_model <- stan_model(model_code = no_categorical_model_code)
 
-fit_reduced <- sampling(
+fit_no_cat <- sampling(
   no_categorical_model,
   data = list(
     n = dat_all_teams$n,
-    final_four = dat_all_teams$final_four,
-    AdjOE = dat_all_teams$AdjOE,
-    AdjDE = dat_all_teams$AdjDE,
-    AdjTempo = dat_all_teams$AdjTempo,
-    seed = dat_all_teams$seed
+    final_four = as.integer(dat_all_teams$final_four),
+    AdjOE = as.numeric(dat_all_teams$AdjOE),
+    AdjDE = as.numeric(dat_all_teams$AdjDE),
+    AdjTempo = as.numeric(dat_all_teams$AdjTempo),
+    seed = as.integer(dat_all_teams$seed)
   ),
   chains = 4,
   iter = 2000,
@@ -668,4 +715,43 @@ final_four_only_posterior_samples %>%
   summarize(mean = mean(value)) %>%
   gf_point(mean ~ seed_level)
 ```
+
+Discussion Questions & Answers
+
+What is the probability that a team reaches the Final Four, based on its adjusted offensive efficiency (AdjOE), adjusted defensive efficiency (AdjDE), and adjusted tempo (AdjTempo)?
+
+Adjusted Offensive Efficiency (AdjOE)
+
+- strong correlation with the likelihood of making it to the Final Four.
+- b1's posterior mean is positive, and its credible interval does not include 0.
+- implies that teams are far more likely to reach the Final Four if they have a better offensive efficiency.
+
+Adjusted Defensive Efficiency (AdjDE)
+
+- negative correlation with the likelihood of making it to the Final Four, as anticipated.
+- higher defensive efficiency, or lower AdjDE values, increases the likelihood of making it to the Final Four; the posterior mean of b2 is negative.
+- shows that longer tournament runs are predicted by stronger defenses (lower AdjDE).
+
+Adjusted Tempo (AdjTempo)
+
+- the posterior distribution of b3 has a wide degree of uncertainty and centered around 0.
+
+- implies that the likelihood of making it to the Final Four is not much impacted by tempo.
+
+Seed (via hierarchical model)
+
+- Baseline odds of making it to the Final Four are often higher for teams with stronger seeds (lower seed numbers).
+- Partial pooling across seed categories (alpha_seed) is possible with the hierarchical model, demonstrating performance variability that cannot be fully explained by metrics such as AdjOE/AdjDE alone.
+
+Model Comparison
+
+- Models with multiple predictors (AdjOE, AdjDE, and seed) outperform reduced models with just one predictor, according to WAIC results.
+- The whole hierarchical model supports the incorporation of seed-based group-level effects and provides a better predictive fit than flat logistic regression.
+
+Overall Conclusion
+
+- The best indicators of a team's chances of making it to the Final Four are its offensive and defensive performance.
+- Tempo doesn't have a big impact on results.
+- Model accuracy is increased through seeding, which reflects tournament committees' inherent strength evaluations.
+
 
